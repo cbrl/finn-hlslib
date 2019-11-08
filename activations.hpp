@@ -145,6 +145,34 @@ public:
   }
 };
 
+template<unsigned NF, unsigned PE, unsigned NumTH, 
+	 typename TA, typename TR, int ActVal = 0, typename Compare = std::less<TA>>
+class TMRThresholdsActivation {
+public:
+  TA m_thresholds[PE][NF][NumTH][3];
+  
+public:
+  TA init(unsigned const  nf, unsigned const  pe) const {
+#pragma HLS inline
+    return  TA(0);
+  }
+
+public:
+  TR activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+	for(unsigned int i=0; i< NumTH; i++){
+#pragma HLS unroll
+      TA x = m_thresholds[pe][nf][i][0];
+      TA y = m_thresholds[pe][nf][i][1];
+      TA z = m_thresholds[pe][nf][i][2];
+      TA thresh = (x & y) | (y & z) | (x & z);
+      result+=Compare()(thresh, accu);
+    }
+    return result;
+  }
+};
+
 /**
  * \brief Thresholding function for multiple images
  *

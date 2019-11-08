@@ -97,6 +97,44 @@ class BinaryWeights {
   }
 };
 
+template<unsigned SIMD, unsigned PE, unsigned TILES>
+class TMRBinaryWeights {
+ public:
+  ap_uint<SIMD>  m_weights[PE][TILES][3];
+
+ private:
+  /**
+   * Temporary container for the tile index to implement the
+   * memory access in pe -> tile order.
+   */
+  class TileIndex {
+    TMRBinaryWeights const &m_par;
+    unsigned         const  m_idx;
+
+   public:
+    TileIndex(TMRBinaryWeights const &par, unsigned const  idx)
+      : m_par(par), m_idx(idx) {
+#pragma HLS inline
+    }
+
+   public:
+    ap_uint<SIMD> operator[](unsigned const  pe) const {
+#pragma HLS inline
+      ap_uint<SIMD> x = m_par.m_weights[pe][m_idx][0];
+      ap_uint<SIMD> y = m_par.m_weights[pe][m_idx][1];
+      ap_uint<SIMD> z = m_par.m_weights[pe][m_idx][2];
+
+      return  (x & y) | (y & z) | (x & z);
+    }
+  };
+
+ public:
+  TileIndex weights(unsigned const  tile) const {
+#pragma HLS inline
+    return  TileIndex(*this, tile);
+  }
+};
+
 
 /**
  * \brief      A fixeed point weight storage adapter that translates the internal 
@@ -135,6 +173,51 @@ class FixedPointWeights {
 #pragma HLS unroll
         ap_int<WT::width> local_temp;
         local_temp = m_par.m_weights[pe][m_idx]((i+1)*WT::width-1, i*WT::width);
+        WT value = *reinterpret_cast<WT*>(&local_temp);
+        temp[i] = value;
+      }
+      return  temp;
+    }
+  };
+
+ public:
+  TileIndex weights(unsigned const  tile) const {
+#pragma HLS inline
+    return  TileIndex(*this, tile);
+  }
+};
+
+template<unsigned SIMD, typename WT ,unsigned PE, unsigned TILES>
+class TMRFixedPointWeights {
+ public:
+  ap_uint<SIMD*WT::width>  m_weights[PE][TILES][3];
+
+ private:
+  /**
+   * Temporary container for the tile index to implement the
+   * memory access in pe -> tile order.
+   */
+  class TileIndex {
+    TMRFixedPointWeights const &m_par;
+    unsigned             const  m_idx;
+
+   public:
+    TileIndex(TMRFixedPointWeights const &par, unsigned const  idx)
+      : m_par(par), m_idx(idx) {
+#pragma HLS inline
+    }
+
+   public:
+    std::array<WT,SIMD> operator[](unsigned const  pe) const {
+#pragma HLS inline
+      std::array<WT,SIMD> temp;
+	  for(unsigned int i=0; i<SIMD; i++) {
+#pragma HLS unroll
+        ap_int<WT::width> x = m_par.m_weights[pe][m_idx][0]((i+1)*WT::width-1, i*WT::width);
+        ap_int<WT::width> y = m_par.m_weights[pe][m_idx][1]((i+1)*WT::width-1, i*WT::width);
+        ap_int<WT::width> z = m_par.m_weights[pe][m_idx][2]((i+1)*WT::width-1, i*WT::width);
+
+        ap_int<WT::width> local_temp = (x & y) | (y & z) | (x & z);
         WT value = *reinterpret_cast<WT*>(&local_temp);
         temp[i] = value;
       }
