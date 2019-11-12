@@ -140,10 +140,10 @@ void Matrix_Vector_Activate_Batch(hls::stream<TI> &in,
     }
 
     // compute matrix-vector product for each processing element
-    auto const &w = weights.weights(tile);
+    auto const &w = const_cast<typename std::remove_const<TW>::type&>(weights).weights(tile);
     for(unsigned  pe = 0; pe < PE; pe++) {
 #pragma HLS UNROLL
-      auto const  wgt = TWeightI()(w[pe]);
+      auto const  wgt = TWeightI()(const_cast<typename std::remove_const<typename std::remove_reference<decltype(w)>::type>::type&>(w)[pe]);
       auto const  act = TSrcI()(inElem);
       accu[pe] = mac<SIMD>(accu[pe], wgt, act, r);
     }
@@ -155,7 +155,7 @@ void Matrix_Vector_Activate_Batch(hls::stream<TI> &in,
       auto  outElem = TDstI().template operator()<TO>();
       for (unsigned  pe = 0; pe < PE; pe++) {
 #pragma HLS UNROLL
-	    outElem[pe] = activation.activate(nf, pe, accu[pe]);
+	    outElem[pe] = const_cast<typename std::remove_const<TA>::type&>(activation).activate(nf, pe, accu[pe]);
 	    //std::cout << "out " << outElem[pe] << std::endl;
       }
 

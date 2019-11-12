@@ -108,28 +108,37 @@ class TMRBinaryWeights {
    * memory access in pe -> tile order.
    */
   class TileIndex {
-    TMRBinaryWeights const &m_par;
+    TMRBinaryWeights &m_par;
     unsigned         const  m_idx;
 
    public:
-    TileIndex(TMRBinaryWeights const &par, unsigned const  idx)
+    TileIndex(TMRBinaryWeights &par, unsigned const  idx)
       : m_par(par), m_idx(idx) {
 #pragma HLS inline
     }
 
    public:
-    ap_uint<SIMD> operator[](unsigned const  pe) const {
+    ap_uint<SIMD> operator[](unsigned const  pe) {
 #pragma HLS inline
+      // Get the module values
       ap_uint<SIMD> x = m_par.m_weights[pe][m_idx][0];
       ap_uint<SIMD> y = m_par.m_weights[pe][m_idx][1];
       ap_uint<SIMD> z = m_par.m_weights[pe][m_idx][2];
 
-      return  (x & y) | (y & z) | (x & z);
+      // Take the common 2 of the 3 values
+      ap_uint<SIMD> val = (x & y) | (y & z) | (x & z);
+
+      // Correct potential error
+      m_par.m_weights[pe][m_idx][0] = val;
+      m_par.m_weights[pe][m_idx][1] = val;
+      m_par.m_weights[pe][m_idx][2] = val;
+
+      return val;
     }
   };
 
  public:
-  TileIndex weights(unsigned const  tile) const {
+  TileIndex weights(unsigned const  tile) {
 #pragma HLS inline
     return  TileIndex(*this, tile);
   }
@@ -198,26 +207,37 @@ class TMRFixedPointWeights {
    * memory access in pe -> tile order.
    */
   class TileIndex {
-    TMRFixedPointWeights const &m_par;
+    TMRFixedPointWeights &m_par;
     unsigned             const  m_idx;
 
    public:
-    TileIndex(TMRFixedPointWeights const &par, unsigned const  idx)
+    TileIndex(TMRFixedPointWeights &par, unsigned const  idx)
       : m_par(par), m_idx(idx) {
 #pragma HLS inline
     }
 
    public:
-    std::array<WT,SIMD> operator[](unsigned const  pe) const {
+    std::array<WT,SIMD> operator[](unsigned const  pe) {
 #pragma HLS inline
       std::array<WT,SIMD> temp;
+      
+      // Get the module values
+      ap_uint<SIMD*WT::width> x = m_par.m_weights[pe][m_idx][0];
+      ap_uint<SIMD*WT::width> y = m_par.m_weights[pe][m_idx][1];
+      ap_uint<SIMD*WT::width> z = m_par.m_weights[pe][m_idx][2];
+
+      // Take the common 2 of the 3 values
+      ap_uint<SIMD*WT::width> val = (x & y) | (y & z) | (x & z);
+
+      // Correct potential error
+      m_par.m_weights[pe][m_idx][0] = val;
+      m_par.m_weights[pe][m_idx][1] = val;
+      m_par.m_weights[pe][m_idx][2] = val;
+
 	  for(unsigned int i=0; i<SIMD; i++) {
 #pragma HLS unroll
-        ap_int<WT::width> x = m_par.m_weights[pe][m_idx][0]((i+1)*WT::width-1, i*WT::width);
-        ap_int<WT::width> y = m_par.m_weights[pe][m_idx][1]((i+1)*WT::width-1, i*WT::width);
-        ap_int<WT::width> z = m_par.m_weights[pe][m_idx][2]((i+1)*WT::width-1, i*WT::width);
-
-        ap_int<WT::width> local_temp = (x & y) | (y & z) | (x & z);
+        ap_int<WT::width> local_temp;
+        local_temp = val((i+1)*WT::width-1, i*WT::width);
         WT value = *reinterpret_cast<WT*>(&local_temp);
         temp[i] = value;
       }
@@ -226,7 +246,7 @@ class TMRFixedPointWeights {
   };
 
  public:
-  TileIndex weights(unsigned const  tile) const {
+  TileIndex weights(unsigned const  tile) {
 #pragma HLS inline
     return  TileIndex(*this, tile);
   }

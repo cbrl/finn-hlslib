@@ -158,15 +158,24 @@ public:
   }
 
 public:
-  TR activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+  TR activate(unsigned const  nf, unsigned const  pe,  TA const &accu) {
 #pragma HLS inline
     TR result=ActVal;
 	for(unsigned int i=0; i< NumTH; i++){
 #pragma HLS unroll
+      // Get module values
       TA x = m_thresholds[pe][nf][i][0];
       TA y = m_thresholds[pe][nf][i][1];
       TA z = m_thresholds[pe][nf][i][2];
+
+      // Take the common 2 of the 3 values
       TA thresh = (x & y) | (y & z) | (x & z);
+
+      // Correct potential error
+      m_thresholds[pe][nf][i][0] = thresh;
+      m_thresholds[pe][nf][i][1] = thresh;
+      m_thresholds[pe][nf][i][2] = thresh;
+      
       result+=Compare()(thresh, accu);
     }
     return result;
