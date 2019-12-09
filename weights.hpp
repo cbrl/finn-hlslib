@@ -100,7 +100,7 @@ class BinaryWeights {
 template<unsigned SIMD, unsigned PE, unsigned TILES>
 class TMRBinaryWeights {
  public:
-  ap_uint<SIMD>  m_weights[PE][TILES][3];
+  ap_uint<SIMD>  m_weights[3][PE][TILES];
 
  private:
   /**
@@ -121,17 +121,17 @@ class TMRBinaryWeights {
     ap_uint<SIMD> operator[](unsigned const  pe) {
 #pragma HLS inline
       // Get the module values
-      ap_uint<SIMD> x = m_par.m_weights[pe][m_idx][0];
-      ap_uint<SIMD> y = m_par.m_weights[pe][m_idx][1];
-      ap_uint<SIMD> z = m_par.m_weights[pe][m_idx][2];
+      ap_uint<SIMD> x = m_par.m_weights[0][pe][m_idx];
+      ap_uint<SIMD> y = m_par.m_weights[1][pe][m_idx];
+      ap_uint<SIMD> z = m_par.m_weights[2][pe][m_idx];
 
       // Take the common 2 of the 3 values
       ap_uint<SIMD> val = (x & y) | (y & z) | (x & z);
 
       // Correct potential error
-      m_par.m_weights[pe][m_idx][0] = val;
-      m_par.m_weights[pe][m_idx][1] = val;
-      m_par.m_weights[pe][m_idx][2] = val;
+      m_par.m_weights[0][pe][m_idx] = val;
+      m_par.m_weights[1][pe][m_idx] = val;
+      m_par.m_weights[2][pe][m_idx] = val;
 
       return val;
     }
@@ -199,7 +199,7 @@ class FixedPointWeights {
 template<unsigned SIMD, typename WT ,unsigned PE, unsigned TILES>
 class TMRFixedPointWeights {
  public:
-  ap_uint<SIMD*WT::width>  m_weights[PE][TILES][3];
+  ap_uint<SIMD*WT::width>  m_weights[3][PE][TILES];
 
  private:
   /**
@@ -222,17 +222,17 @@ class TMRFixedPointWeights {
       std::array<WT,SIMD> temp;
       
       // Get the module values
-      ap_uint<SIMD*WT::width> x = m_par.m_weights[pe][m_idx][0];
-      ap_uint<SIMD*WT::width> y = m_par.m_weights[pe][m_idx][1];
-      ap_uint<SIMD*WT::width> z = m_par.m_weights[pe][m_idx][2];
+      ap_uint<SIMD*WT::width> x = m_par.m_weights[0][pe][m_idx];
+      ap_uint<SIMD*WT::width> y = m_par.m_weights[1][pe][m_idx];
+      ap_uint<SIMD*WT::width> z = m_par.m_weights[2][pe][m_idx];
 
       // Take the common 2 of the 3 values
       ap_uint<SIMD*WT::width> val = (x & y) | (y & z) | (x & z);
 
       // Correct potential error
-      m_par.m_weights[pe][m_idx][0] = val;
-      m_par.m_weights[pe][m_idx][1] = val;
-      m_par.m_weights[pe][m_idx][2] = val;
+      m_par.m_weights[0][pe][m_idx] = val;
+      m_par.m_weights[1][pe][m_idx] = val;
+      m_par.m_weights[2][pe][m_idx] = val;
 
 	  for(unsigned int i=0; i<SIMD; i++) {
 #pragma HLS unroll

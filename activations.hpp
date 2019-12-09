@@ -149,7 +149,7 @@ template<unsigned NF, unsigned PE, unsigned NumTH,
 	 typename TA, typename TR, int ActVal = 0, typename Compare = std::less<TA>>
 class TMRThresholdsActivation {
 public:
-  TA m_thresholds[PE][NF][NumTH][3];
+  TA m_thresholds[3][PE][NF][NumTH];
   
 public:
   TA init(unsigned const  nf, unsigned const  pe) const {
@@ -164,17 +164,17 @@ public:
 	for(unsigned int i=0; i< NumTH; i++){
 #pragma HLS unroll
       // Get module values
-      TA x = m_thresholds[pe][nf][i][0];
-      TA y = m_thresholds[pe][nf][i][1];
-      TA z = m_thresholds[pe][nf][i][2];
+      TA x = m_thresholds[0][pe][nf][i];
+      TA y = m_thresholds[1][pe][nf][i];
+      TA z = m_thresholds[2][pe][nf][i];
 
       // Take the common 2 of the 3 values
       TA thresh = (x & y) | (y & z) | (x & z);
 
       // Correct potential error
-      m_thresholds[pe][nf][i][0] = thresh;
-      m_thresholds[pe][nf][i][1] = thresh;
-      m_thresholds[pe][nf][i][2] = thresh;
+      m_thresholds[0][pe][nf][i] = thresh;
+      m_thresholds[1][pe][nf][i] = thresh;
+      m_thresholds[2][pe][nf][i] = thresh;
       
       result+=Compare()(thresh, accu);
     }
