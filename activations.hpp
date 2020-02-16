@@ -52,7 +52,9 @@
 #ifndef ACTIVATIONS_HPP
 #define ACTIVATIONS_HPP
 
+#include <type_traits>
 #include "interpret.hpp"
+#include "deinterleave.h"
 
 /**
  * General contract for activation functions.
@@ -164,23 +166,92 @@ public:
 	for(unsigned int i=0; i< NumTH; i++){
 #pragma HLS unroll
       // Get module values
-      TA x = m_thresholds[0][pe][nf][i];
-      TA y = m_thresholds[1][pe][nf][i];
-      TA z = m_thresholds[2][pe][nf][i];
+      const TA x = m_thresholds[0][pe][nf][i];
+      const TA y = m_thresholds[1][pe][nf][i];
+      const TA z = m_thresholds[2][pe][nf][i];
 
       // Take the common 2 of the 3 values
-      TA thresh = (x & y) | (y & z) | (x & z);
+      const TA thresh = (x & y) | (y & z) | (x & z);
 
       // Correct potential error
       m_thresholds[0][pe][nf][i] = thresh;
       m_thresholds[1][pe][nf][i] = thresh;
       m_thresholds[2][pe][nf][i] = thresh;
-      
+
       result+=Compare()(thresh, accu);
     }
     return result;
   }
 };
+
+
+// Interleaving doesn't fully work with odd NF, so
+// the last element would not be interleaved.
+template<unsigned NF, unsigned PE, unsigned NumTH, 
+	 typename TA, typename TR, int ActVal = 0, typename Compare = std::less<TA>>
+class InterleavedThresholdsActivation {
+  static_assert(NF > 1, "InterleavedThresholdsActivation only works with NF > 1");
+
+public:
+  TA m_thresholds[PE][NF][NumTH];
+
+public:
+  TA init(unsigned const  nf, unsigned const  pe) const {
+#pragma HLS inline
+    return  TA(0);
+  }
+
+public:
+  template<typename T = TR>
+  typename std::enable_if<(NF % 2) == 0, T>::type
+  activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+    activate_impl(result, nf, pe, accu);
+    return result;
+  }
+
+  template<typename T = TR>
+  typename std::enable_if<(NF % 2) != 0, T>::type
+  activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+    if (nf < (NF - 1)) {
+      activate_impl(result, nf, pe, accu);
+    }
+    else {
+      for(unsigned int i = 0; i < NumTH; ++i) {
+#pragma HLS unroll
+        result += Compare()(m_thresholds[pe][nf][i], accu);
+      }
+    }
+    return result;
+  }
+
+private:
+  void activate_impl(TR &result, unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    unsigned const nf0 = nf & (~unsigned(1));
+
+    for(unsigned int i = 0; i < NumTH; ++i) {
+  #pragma HLS unroll
+      const ap_uint<2*TA::width> x = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0][i]);
+      const ap_uint<2*TA::width> y = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0 + 1][i]);
+
+      const ap_uint<2*TA::width> val = (x << TA::width) | y;
+
+      if ((nf & 1) == 0) {
+        const ap_uint<TA::width> thresh = deinterleave(val);
+        result += Compare()(*reinterpret_cast<const TA*>(&thresh), accu);
+      }
+      else {
+        const ap_uint<TA::width> thresh = deinterleave(val >> 1);
+        result += Compare()(*reinterpret_cast<const TA*>(&thresh), accu);
+      }
+    }
+  }
+};
+
 
 /**
  * \brief Thresholding function for multiple images

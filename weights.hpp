@@ -53,6 +53,8 @@
 
 #include <ap_int.h>
 #include <array>
+#include <type_traits>
+#include "deinterleave.h"
 
 
 /**
@@ -121,12 +123,12 @@ class TMRBinaryWeights {
     ap_uint<SIMD> operator[](unsigned const  pe) {
 #pragma HLS inline
       // Get the module values
-      ap_uint<SIMD> x = m_par.m_weights[0][pe][m_idx];
-      ap_uint<SIMD> y = m_par.m_weights[1][pe][m_idx];
-      ap_uint<SIMD> z = m_par.m_weights[2][pe][m_idx];
+      const ap_uint<SIMD> x = m_par.m_weights[0][pe][m_idx];
+      const ap_uint<SIMD> y = m_par.m_weights[1][pe][m_idx];
+      const ap_uint<SIMD> z = m_par.m_weights[2][pe][m_idx];
 
       // Take the common 2 of the 3 values
-      ap_uint<SIMD> val = (x & y) | (y & z) | (x & z);
+      const ap_uint<SIMD> val = (x & y) | (y & z) | (x & z);
 
       // Correct potential error
       m_par.m_weights[0][pe][m_idx] = val;
@@ -222,12 +224,12 @@ class TMRFixedPointWeights {
       std::array<WT,SIMD> temp;
       
       // Get the module values
-      ap_uint<SIMD*WT::width> x = m_par.m_weights[0][pe][m_idx];
-      ap_uint<SIMD*WT::width> y = m_par.m_weights[1][pe][m_idx];
-      ap_uint<SIMD*WT::width> z = m_par.m_weights[2][pe][m_idx];
+      const ap_uint<SIMD*WT::width> x = m_par.m_weights[0][pe][m_idx];
+      const ap_uint<SIMD*WT::width> y = m_par.m_weights[1][pe][m_idx];
+      const ap_uint<SIMD*WT::width> z = m_par.m_weights[2][pe][m_idx];
 
       // Take the common 2 of the 3 values
-      ap_uint<SIMD*WT::width> val = (x & y) | (y & z) | (x & z);
+      const ap_uint<SIMD*WT::width> val = (x & y) | (y & z) | (x & z);
 
       // Correct potential error
       m_par.m_weights[0][pe][m_idx] = val;
@@ -247,6 +249,87 @@ class TMRFixedPointWeights {
 
  public:
   TileIndex weights(unsigned const  tile) {
+#pragma HLS inline
+    return  TileIndex(*this, tile);
+  }
+};
+
+// Interleaving doesn't fully work with odd TILES, so
+// the last element would not be interleaved.
+template<unsigned SIMD, typename WT ,unsigned PE, unsigned TILES>
+class InterleavedFixedPointWeights {
+  static_assert(TILES > 1, "InterleavedFixedPointWeights only works with TILES > 1");
+
+ public:
+  ap_uint<SIMD*WT::width>  m_weights[PE][TILES];
+
+ private:
+  /**
+   * Temporary container for the tile index to implement the
+   * memory access in pe -> tile order.
+   */
+  class TileIndex {
+    InterleavedFixedPointWeights const &m_par;
+    unsigned          const  m_idx;
+
+   public:
+    TileIndex(InterleavedFixedPointWeights const &par, unsigned const  idx)
+      : m_par(par), m_idx(idx) {
+#pragma HLS inline
+    }
+
+   public:
+    std::array<WT,SIMD> operator[](unsigned const  pe) const {
+#pragma HLS inline
+      std::array<WT,SIMD> temp;
+	  for(unsigned int i=0; i<SIMD; i++) {
+#pragma HLS unroll
+        const ap_uint<SIMD*WT::width> weight = get_weight(pe);
+
+        ap_int<WT::width> local_temp;
+        local_temp = weight((i+1)*WT::width-1, i*WT::width);
+        WT value = *reinterpret_cast<WT*>(&local_temp);
+        temp[i] = value;
+      }
+      return  temp;
+    }
+
+   private:
+    template<typename T = ap_uint<SIMD*WT::width>>
+    typename std::enable_if<(TILES % 2) == 0, T>::type
+    get_weight(unsigned const  pe) const {
+#pragma HLS inline
+      return interleaved_weight(pe);
+    }
+
+    template<typename T = ap_uint<SIMD*WT::width>>
+    typename std::enable_if<(TILES % 2) != 0, T>::type
+    get_weight(unsigned const  pe) const {
+#pragma HLS inline
+      return (m_idx < (TILES - 1)) ? interleaved_weight(pe) : m_par.m_weights[pe][m_idx];
+    }
+
+    ap_uint<SIMD*WT::width> interleaved_weight(unsigned const  pe) const {
+#pragma HLS inline
+      const unsigned idx0 = m_idx & (~unsigned(1));
+      const ap_uint<2*SIMD*WT::width> x = m_par.m_weights[pe][idx0];
+      const ap_uint<2*SIMD*WT::width> y = m_par.m_weights[pe][idx0 + 1];
+
+      const ap_uint<2*SIMD*WT::width> val = (x << (SIMD*WT::width)) | y;
+
+      if ((m_idx & 1) == 0) {
+        const ap_uint<SIMD*WT::width> weight = deinterleave(val);
+        return weight;
+      }
+      else {
+        const ap_uint<SIMD*WT::width> weight = deinterleave(val >> 1);
+        return weight;
+      }
+    }
+  };
+
+ public:
+  TileIndex weights(unsigned const  tile) const {
 #pragma HLS inline
     return  TileIndex(*this, tile);
   }

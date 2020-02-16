@@ -133,8 +133,8 @@ template<	unsigned int ImgDim,
 			unsigned int NumChannels,
 			typename In_t,
       unsigned int PaddingStyle=2>
-void SameResize(stream<ap_uint<NumChannels* In_t::width> > &in, 
-		stream<ap_uint<NumChannels* In_t::width> > &out){
+void SameResize(hls::stream<ap_uint<NumChannels* In_t::width> > &in, 
+		hls::stream<ap_uint<NumChannels* In_t::width> > &out){
 
 	// Number of "same" windows over the input data
 	constexpr unsigned int SameWindows = (ImgDim) / Stride + ((ImgDim % Stride) > 0);
@@ -203,8 +203,8 @@ template<	unsigned int ImgDim,
 			unsigned int NumChannels,
 			typename In_t,
       unsigned int PaddingStyle=2>
-void SameResize_Batch(stream<ap_uint<NumChannels* In_t::width> > &in, 
-		stream<ap_uint<NumChannels* In_t::width> > &out, 
+void SameResize_Batch(hls::stream<ap_uint<NumChannels* In_t::width> > &in, 
+		hls::stream<ap_uint<NumChannels* In_t::width> > &out, 
 		const unsigned int numReps) {
 	for (unsigned int rep = 0; rep < numReps; rep++) {
 		SameResize<ImgDim, KernelDim, Stride, NumChannels, In_t, PaddingStyle>(in, out);
@@ -330,8 +330,8 @@ void StreamingDataWidthConverter_Batch(hls::stream<ap_uint<InWidth> > & in,
 template<unsigned int DataWidth,
 		unsigned int NumTotal
 >
-void DuplicateStreams(stream<ap_uint<DataWidth> > & in, stream<ap_uint<DataWidth> > & out1,
-		stream<ap_uint<DataWidth> > & out2) {
+void DuplicateStreams(hls::stream<ap_uint<DataWidth> > & in, hls::stream<ap_uint<DataWidth> > & out1,
+		hls::stream<ap_uint<DataWidth> > & out2) {
 	
 	for (unsigned int i = 0; i < NumTotal; i++) {
 #pragma HLS PIPELINE II=1		
@@ -359,8 +359,8 @@ void DuplicateStreams(stream<ap_uint<DataWidth> > & in, stream<ap_uint<DataWidth
 template<unsigned int DataWidth,
 		unsigned int NumTotal
 >
-void DuplicateStreams_Batch(stream<ap_uint<DataWidth> > & in, stream<ap_uint<DataWidth> > & out1,
-		stream<ap_uint<DataWidth> > & out2, const unsigned int numReps) {	
+void DuplicateStreams_Batch(hls::stream<ap_uint<DataWidth> > & in, hls::stream<ap_uint<DataWidth> > & out1,
+		hls::stream<ap_uint<DataWidth> > & out2, const unsigned int numReps) {	
 	for (unsigned int image = 0; image < numReps; image++) {
 		DuplicateStreams<DataWidth, NumTotal>(in, out1, out2);
 	}
@@ -388,8 +388,8 @@ template <unsigned int NumChannels,
           typename Out_t,
           unsigned int NumTotal, 
           int offset = 0>
-void AddStreams(stream<ap_uint<NumChannels * In1_t::width>> &in1, stream<ap_uint<NumChannels * In2_t::width>> &in2,
-                stream<ap_uint<NumChannels * Out_t::width>> &out) {
+void AddStreams(hls::stream<ap_uint<NumChannels * In1_t::width>> &in1, hls::stream<ap_uint<NumChannels * In2_t::width>> &in2,
+                hls::stream<ap_uint<NumChannels * Out_t::width>> &out) {
 
   for (unsigned int i = 0; i < NumTotal; i++) {
 #pragma HLS PIPELINE II = 1
@@ -432,8 +432,8 @@ template <unsigned int NumChannels,
           typename Out_t,
           unsigned int NumTotal,
           int offset = 0>
-void AddStreams_Batch(stream<ap_uint<NumChannels * In1_t::width>> &in1, stream<ap_uint<NumChannels * In2_t::width>> &in2,
-                stream<ap_uint<NumChannels * Out_t::width>> &out, const unsigned int numReps) {
+void AddStreams_Batch(hls::stream<ap_uint<NumChannels * In1_t::width>> &in1, hls::stream<ap_uint<NumChannels * In2_t::width>> &in2,
+                hls::stream<ap_uint<NumChannels * Out_t::width>> &out, const unsigned int numReps) {
   for (unsigned int image = 0; image < numReps; image++) {
     AddStreams<NumChannels, In1_t, In2_t, Out_t, NumTotal, offset>(in1, in2, out);
   }
@@ -464,13 +464,13 @@ template <unsigned int NumChannels,
           unsigned int NumTotal,
           unsigned int PECount, 
           int offset = 0>
-void AddStreamsLayer_Batch(stream<ap_uint<NumChannels * In1_t::width>> &in1, stream<ap_uint<NumChannels * In2_t::width>> &in2,
-                           stream<ap_uint<NumChannels * Out_t::width>> &out, const unsigned int numReps) {
+void AddStreamsLayer_Batch(hls::stream<ap_uint<NumChannels * In1_t::width>> &in1, hls::stream<ap_uint<NumChannels * In2_t::width>> &in2,
+                           hls::stream<ap_uint<NumChannels * Out_t::width>> &out, const unsigned int numReps) {
 #pragma HLS INLINE
   CASSERT_DATAFLOW(NumChannels % PECount == 0);
-  stream<ap_uint<PECount * In1_t::width>> in_folded1;
-  stream<ap_uint<PECount * In2_t::width>> in_folded2;
-  stream<ap_uint<PECount * Out_t::width>> out_folded;
+  hls::stream<ap_uint<PECount * In1_t::width>> in_folded1;
+  hls::stream<ap_uint<PECount * In2_t::width>> in_folded2;
+  hls::stream<ap_uint<PECount * Out_t::width>> out_folded;
   StreamingDataWidthConverter_Batch<NumChannels * In1_t::width, PECount * In1_t::width, NumTotal>(in1, in_folded1, numReps);
   StreamingDataWidthConverter_Batch<NumChannels * In2_t::width, PECount * In2_t::width, NumTotal>(in2, in_folded2, numReps);
   AddStreams_Batch<PECount, In1_t, In2_t, Out_t, NumTotal *(NumChannels / PECount),offset>(in_folded1, in_folded2, out_folded, numReps);
