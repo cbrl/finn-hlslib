@@ -312,10 +312,10 @@ class InterleavedFixedPointWeights {
     ap_uint<SIMD*WT::width> interleaved_weight(unsigned const  pe) const {
 #pragma HLS inline
       const unsigned idx0 = m_idx & (~unsigned(1));
-      const ap_uint<2*SIMD*WT::width> x = m_par.m_weights[pe][idx0];
-      const ap_uint<2*SIMD*WT::width> y = m_par.m_weights[pe][idx0 + 1];
+      const ap_uint<SIMD*WT::width> x = m_par.m_weights[pe][idx0];
+      const ap_uint<SIMD*WT::width> y = m_par.m_weights[pe][idx0 + 1];
 
-      const ap_uint<2*SIMD*WT::width> val = (x << (SIMD*WT::width)) | y;
+      const ap_uint<2*SIMD*WT::width> val = (x, y);//(x << (SIMD*WT::width)) | y;
 
       if ((m_idx & 1) == 0) {
         const ap_uint<SIMD*WT::width> weight = deinterleave(val);

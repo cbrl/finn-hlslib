@@ -235,10 +235,10 @@ private:
 
     for(unsigned int i = 0; i < NumTH; ++i) {
   #pragma HLS unroll
-      const ap_uint<2*TA::width> x = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0][i]);
-      const ap_uint<2*TA::width> y = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0 + 1][i]);
+      const ap_uint<TA::width> x = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0][i]);
+      const ap_uint<TA::width> y = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0 + 1][i]);
 
-      const ap_uint<2*TA::width> val = (x << TA::width) | y;
+      const ap_uint<2*TA::width> val = (x, y);
 
       if ((nf & 1) == 0) {
         const ap_uint<TA::width> thresh = deinterleave(val);
@@ -246,6 +246,76 @@ private:
       }
       else {
         const ap_uint<TA::width> thresh = deinterleave(val >> 1);
+        result += Compare()(*reinterpret_cast<const TA*>(&thresh), accu);
+      }
+    }
+  }
+};
+
+
+// Interleaving doesn't fully work with odd NF, so
+// the last element would not be interleaved.
+template<unsigned NF, unsigned PE, unsigned NumTH, 
+	 typename TA, typename TR, size_t InterleavePattern,
+   int ActVal = 0, typename Compare = std::less<TA>>
+class ResilientInterleavedThresholdsActivation {
+  static_assert(NF > 1, "InterleavedThresholdsActivation only works with NF > 1");
+
+public:
+  TA m_thresholds[PE][NF][NumTH];
+
+public:
+  TA init(unsigned const  nf, unsigned const  pe) const {
+#pragma HLS inline
+    return  TA(0);
+  }
+
+public:
+  template<typename T = TR>
+  typename std::enable_if<(NF % 2) == 0, T>::type
+  activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+    activate_impl(result, nf, pe, accu);
+    return result;
+  }
+
+  template<typename T = TR>
+  typename std::enable_if<(NF % 2) != 0, T>::type
+  activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+    if (nf < (NF - 1)) {
+      activate_impl(result, nf, pe, accu);
+    }
+    else {
+      for(unsigned int i = 0; i < NumTH; ++i) {
+#pragma HLS unroll
+        result += Compare()(m_thresholds[pe][nf][i], accu);
+      }
+    }
+    return result;
+  }
+
+private:
+  void activate_impl(TR &result, unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    unsigned const nf0 = nf & (~unsigned(1));
+
+    for(unsigned int i = 0; i < NumTH; ++i) {
+  #pragma HLS unroll
+      const ap_uint<TA::width> x = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0][i]);
+      const ap_uint<TA::width> y = *reinterpret_cast<const ap_uint<TA::width>*>(&m_thresholds[pe][nf0 + 1][i]);
+
+      const ap_uint<2*TA::width> val = (x, y);//(x << TA::width) | y;
+
+      if ((nf & 1) == 0) {
+        const ap_uint<TA::width> thresh = deinterleave_pattern(val, ap_uint<2*TA::width>(InterleavePattern));
+        result += Compare()(*reinterpret_cast<const TA*>(&thresh), accu);
+      }
+      else {
+        ap_uint<TA::width> thresh = deinterleave_pattern(val, ap_uint<2*TA::width>(~InterleavePattern));
+        thresh.reverse();
         result += Compare()(*reinterpret_cast<const TA*>(&thresh), accu);
       }
     }
