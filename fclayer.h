@@ -110,4 +110,37 @@ void StreamingFCLayer_Batch(hls::stream<ap_uint<InStreamW>>  &in,
      weights, activation, reps, r);
 }
 
+
+// Nearly identical to the above function, but with some extra template parameters needed for the ORAM interface.
+template<
+  unsigned int MatrixW, unsigned int MatrixH, // geometry must be specified
+  unsigned int SIMD,    unsigned int PE, unsigned int TILES, unsigned int NF, unsigned int NumTH,
+
+  typename TSrcI = Identity,      // redefine I/O interpretation as needed
+  typename TDstI = Identity,
+  typename TWeightI = Identity,	  // redefine I/O interpretation as needed for weigths
+
+  int InStreamW, int OutStreamW,  // safely deducible (stream width must be int though!)
+  typename TW,   typename TA, typename R
+>
+void StreamingFCLayer_Batch_ORAM(hls::stream<ap_uint<InStreamW>>  &in,
+			    hls::stream<ap_uint<OutStreamW>> &out,
+			    TW const        &weights,
+			    TA const        &activation,
+			    unsigned const   reps,
+				R const &r) {
+//#pragma HLS INLINE
+#pragma HLS DATAFLOW
+  unsigned const  InpPerImage = MatrixW / InStreamW * TSrcI::width;
+  unsigned const  OutPerImage = MatrixH / PE;
+
+  WidthAdjustedInputStream <InStreamW, SIMD*TSrcI::width, InpPerImage>  wa_in (in,  reps);
+  WidthAdjustedOutputStream<PE*TDstI::width,  OutStreamW, OutPerImage>  wa_out(out, reps);
+
+  Matrix_Vector_Activate_Batch_ORAM<MatrixW, MatrixH, SIMD, PE, TILES, NF, NumTH, TSrcI, TDstI, TWeightI>
+    (static_cast<hls::stream<ap_uint<SIMD*TSrcI::width>>&>(wa_in),
+     static_cast<hls::stream<ap_uint<PE*TDstI::width>>&>  (wa_out),
+     weights, activation, reps, r);
+}
+
 #endif

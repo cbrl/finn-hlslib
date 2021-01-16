@@ -1,0 +1,10 @@
+^C:\USERS\TERRA\GOOGLE DRIVE\DOCUMENTS\DNN RESEARCH PROJECT\BNN\PATHORAM\FPGA\HW\BUILD\CMAKEFILES\D02EF5C6C0B1BBA7097F588B74A48AC1\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Terra/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw" "-BC:/Users/Terra/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/build" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "C:/Users/Terra/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/build/testbench.sln"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

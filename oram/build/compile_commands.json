@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/home/hyperion/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/build",
+  "command": "/usr/bin/g++ -I/home/hyperion/Xilinx/Vivado/2020.1/include -g -o CMakeFiles/testbench.dir/top.cpp.o -c \"/home/hyperion/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/top.cpp\"",
+  "file": "/home/hyperion/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/top.cpp"
+},
+{
+  "directory": "/home/hyperion/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/build",
+  "command": "/usr/bin/g++ -I/home/hyperion/Xilinx/Vivado/2020.1/include -g -o CMakeFiles/testbench.dir/test_bench.cpp.o -c \"/home/hyperion/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/test_bench.cpp\"",
+  "file": "/home/hyperion/Google Drive/Documents/DNN Research Project/BNN/PathORAM/FPGA/hw/test_bench.cpp"
+}
+]

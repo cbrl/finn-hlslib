@@ -120,4 +120,48 @@ void ConvLayer_Batch(hls::stream<ap_uint<InStreamW>>  &in,
      weights, activation, reps* OFMDim * OFMDim, r);
 }
 
+
+// Nearly identical to the above function, but with some extra template parameters needed for the ORAM interface.
+template<
+		unsigned int ConvKernelDim,		
+		unsigned int IFMChannels,		
+		unsigned int IFMDim,			
+		unsigned int OFMChannels,		
+		unsigned int OFMDim,			
+		
+		unsigned int SIMD, 				// number of SIMD lanes
+		unsigned int PE,				// number of PEs
+		unsigned int TILES,
+		unsigned int NF,
+		unsigned int NumTH,
+		
+		typename TSrcI = Identity,      // redefine I/O interpretation as needed for input activations
+		typename TDstI = Identity,		// redefine I/O interpretation as needed for output activations
+		typename TWeightI = Identity,	// redefine I/O interpretation as needed for weigths
+
+		int InStreamW, int OutStreamW,  // safely deducible (stream width must be int though!)
+		typename TW,   typename TA,  typename R
+>
+void ConvLayer_Batch_ORAM(hls::stream<ap_uint<InStreamW>>  &in,
+			    hls::stream<ap_uint<OutStreamW>> &out,
+			    TW const        &weights,
+			    TA const        &activation,
+			    unsigned const   reps,
+				R const &r) {
+//#pragma HLS INLINE
+#pragma HLS DATAFLOW
+  unsigned const MatrixW = ConvKernelDim * ConvKernelDim * IFMChannels;
+  unsigned const MatrixH = OFMChannels;
+  unsigned const InpPerImage = IFMDim*IFMDim*IFMChannels/InStreamW * TSrcI::width;
+  WidthAdjustedInputStream <InStreamW, SIMD*TSrcI::width, InpPerImage>  wa_in (in,  reps);
+  WidthAdjustedOutputStream <PE*TDstI::width, OutStreamW, OFMDim * OFMDim * (OFMChannels / PE)>  mvOut (out,  reps);
+  hls::stream<ap_uint<SIMD*TSrcI::width> > convInp("StreamingConvLayer_Batch.convInp");
+  ConvolutionInputGenerator<ConvKernelDim, IFMChannels, TSrcI::width, IFMDim,
+			OFMDim, SIMD,1>(wa_in, convInp, reps);
+  Matrix_Vector_Activate_Batch_ORAM<MatrixW, MatrixH, SIMD, PE, TILES, NF, NumTH, TSrcI, TDstI, TWeightI>
+    (static_cast<hls::stream<ap_uint<SIMD*TSrcI::width>>&>(convInp),
+     static_cast<hls::stream<ap_uint<PE*TDstI::width>>&>  (mvOut),
+     weights, activation, reps* OFMDim * OFMDim, r);
+}
+
 #endif

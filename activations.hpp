@@ -91,6 +91,16 @@ public:
   }
 };
 
+template<typename T>
+class ORAMPassThroughActivation : public Activation<T, T> {
+public:
+  template<unsigned NF, unsigned NumTH>
+  T activate(unsigned const  nf, unsigned const  pe, T const &accu) const {
+#pragma HLS inline
+    return  accu;
+  }
+};
+
 /**
  * Use a simple global threshold comparison as activation function.
  *
@@ -146,6 +156,136 @@ public:
     return result;
   }
 };
+
+
+template<typename TA, unsigned NumThresh, typename TR, int ActVal = 0, typename Compare = std::less<TA>>
+class ORAMThresholdsActivationBuf {
+public:
+  TA m_thresholds[NumThresh];
+
+  ORAMThresholdsActivationBuf() {
+    #pragma HLS inline
+  }
+  
+public:
+  TA init(unsigned const  nf, unsigned const  pe) const {
+#pragma HLS inline
+    return  TA(0);
+  }
+
+public:
+  template<unsigned NF, unsigned NumTH>
+  TR activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+	for(unsigned int i=0; i< NumTH; i++){
+#pragma HLS unroll
+      result+=Compare()(TA(m_thresholds[(pe * NF * NumTH) + (nf * NumTH) + i]), accu);
+    }
+    return result;
+  }
+};
+
+
+template<typename ORAM, typename ATU, unsigned Layer,
+  unsigned NF, unsigned PE, unsigned NumTH, typename TA, typename TR,
+  int ActVal = 0, typename Compare = std::less<TA>>
+class ORAMThresholdsActivation {
+public:
+  unsigned cached_block;
+  typename ORAM::Block cache;
+
+  ORAM& oram;
+  const ATU& atu;
+  
+public:
+  ORAMThresholdsActivation(ORAM& oram, const ATU& atu) : oram(oram), atu(atu) {
+    #pragma HLS inline
+  }
+
+  TA init(unsigned const  nf, unsigned const  pe) const {
+#pragma HLS inline
+    return  TA(0);
+  }
+
+public:
+  TR activate(unsigned const  nf, unsigned const  pe,  TA const &accu, uint8_t* server_data) {
+#pragma HLS inline
+    TR result=ActVal;
+
+    ap_uint<TA::width> val;
+    std::pair<size_t, size_t> block_byte;
+    const size_t element_size = atu.element_size(Layer);
+
+	  for(unsigned int i=0; i< NumTH; i++){
+#pragma HLS unroll
+      block_byte = atu.index_to_block(Layer, pe, nf, i);
+
+      if (block_byte.first != cached_block) {
+        oram.read(block_byte.first, cache.data(), server_data);
+        cached_block = block_byte.first;
+      }
+
+      val = 0;
+      for (int i = 0; i < element_size; ++i) {
+        #pragma HLS pipeline
+        val |= ap_uint<TA::width>(cache[block_byte.second + i]) << (i * 8);
+      }
+
+      result+=Compare()(*reinterpret_cast<TA*>(&val), accu);
+    }
+    return result;
+  }
+};
+
+/*
+template<unsigned Layer, unsigned NF, unsigned PE, unsigned NumTH, 
+	 typename TA, typename TR, int ActVal = 0, typename Compare = std::less<TA>>
+class ORAMThresholdsActivation {
+public:
+  TA m_thresholds[PE][NF][NumTH];
+  
+public:
+  TA init(unsigned const  nf, unsigned const  pe) const {
+#pragma HLS inline
+    return  TA(0);
+  }
+
+public:
+  TR activate(unsigned const  nf, unsigned const  pe,  TA const &accu) const {
+#pragma HLS inline
+    TR result=ActVal;
+	for(unsigned int i=0; i< NumTH; i++){
+#pragma HLS unroll
+      result+=Compare()(m_thresholds[pe][nf][i], accu);
+    }
+    return result;
+  }
+
+  template<typename ORAM, typename ATU>
+  void loadParameters(ORAM& oram, const ATU& atu, uint8_t* block_cache, uint8_t* server_data) {
+    const size_t element_size = atu.element_size(Layer);
+    std::pair<size_t, size_t> block_byte;
+
+    ap_uint<TA::width> val;
+
+    for (unsigned pe = 0; pe < PE; ++pe) {
+      for (unsigned nf = 0; nf < NF; ++nf) {
+        for (unsigned numth; numth < NumTH; ++numth) {
+          block_byte = atu.index_to_block(Layer, pe, nf, numth);
+          oram.read(block_byte.first, block_cache, server_data);
+
+          for (size_t i = 0; i < element_size; ++i) {
+            #pragma HLS pipeline
+            val |= ap_uint<TA::width>(block_cache[block_byte.second + i]) << (i * 8);
+          }
+          m_thresholds[pe][nf][numth] = *reinterpret_cast<TA*>(&val);
+        }
+      }
+    }
+  }
+};
+*/
 
 template<unsigned NF, unsigned PE, unsigned NumTH, 
 	 typename TA, typename TR, int ActVal = 0, typename Compare = std::less<TA>>
@@ -256,7 +396,7 @@ private:
 // Interleaving doesn't fully work with odd NF, so
 // the last element would not be interleaved.
 template<unsigned NF, unsigned PE, unsigned NumTH, 
-	 typename TA, typename TR, size_t InterleavePattern,
+	 typename TA, typename TR, uint64_t InterleavePattern,
    int ActVal = 0, typename Compare = std::less<TA>>
 class ResilientInterleavedThresholdsActivation {
   static_assert(NF > 1, "InterleavedThresholdsActivation only works with NF > 1");
@@ -322,6 +462,29 @@ private:
   }
 };
 
+
+template<size_t Layer, unsigned NF, unsigned PE, unsigned NumTH, typename TA, typename Thresholds, typename ORAM, typename ATU>
+void loadORAMThresholds(Thresholds& thresh, ORAM& oram, const ATU& atu, uint8_t* block_cache, uint8_t* server_data) {
+  const size_t element_size = atu.element_size(Layer);
+  std::pair<size_t, size_t> block_byte;
+
+  ap_uint<TA::width> val;
+
+  for (unsigned pe = 0; pe < PE; ++pe) {
+    for (unsigned nf = 0; nf < NF; ++nf) {
+      for (unsigned numth; numth < NumTH; ++numth) {
+        block_byte = atu.index_to_block(Layer, pe, nf, numth);
+        oram.read(block_byte.first, block_cache, server_data);
+
+        for (size_t i = 0; i < element_size; ++i) {
+          #pragma HLS pipeline
+          val |= ap_uint<TA::width>(block_cache[block_byte.second + i]) << (i * 8);
+        }
+        thresh.m_thresholds[pe][nf][numth] = *reinterpret_cast<TA*>(&val);
+      }
+    }
+  }
+}
 
 /**
  * \brief Thresholding function for multiple images

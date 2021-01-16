@@ -99,6 +99,153 @@ class BinaryWeights {
   }
 };
 
+
+template<unsigned WeightSize, unsigned NumWeights>
+class ORAMBinaryWeightsBuf {
+public:
+  ap_uint<WeightSize> m_weights[NumWeights];
+
+  ORAMBinaryWeightsBuf() {
+    #pragma HLS inline
+  }
+
+ private:
+  class TileIndex {
+    ORAMBinaryWeightsBuf const &m_par;
+    unsigned             const  m_idx;
+
+   public:
+    TileIndex(ORAMBinaryWeightsBuf const &par, unsigned const  idx)
+      : m_par(par), m_idx(idx) {
+#pragma HLS inline
+    }
+
+   public:
+    template<unsigned SIMD, unsigned TILES>
+    ap_uint<SIMD> get(unsigned const  pe) const {
+#pragma HLS inline
+      return ap_uint<SIMD>(m_par.m_weights[(pe * TILES) + m_idx]);
+    }
+  };
+
+ public:
+  TileIndex weights(unsigned const  tile) const {
+#pragma HLS inline
+    return  TileIndex(*this, tile);
+  }
+};
+
+
+template<typename ORAM, typename ATU, unsigned Layer, unsigned SIMD, unsigned PE, unsigned TILES>
+class ORAMBinaryWeights {
+ public:
+  unsigned cached_block;
+  typename ORAM::Block cache;
+
+  ORAM& oram;
+  const ATU& atu;
+
+  ORAMBinaryWeights(ORAM& oram, const ATU& atu) : oram(oram), atu(atu) {
+    #pragma HLS inline
+  }
+
+ private:
+  /**
+   * Temporary container for the tile index to implement the
+   * memory access in pe -> tile order.
+   */
+  class TileIndex {
+    ORAMBinaryWeights &m_par;
+    unsigned const     m_idx;
+
+   public:
+    TileIndex(ORAMBinaryWeights &par, unsigned const idx)
+      : m_par(par), m_idx(idx) {
+#pragma HLS inline
+    }
+
+   public:
+    ap_uint<SIMD> get(unsigned const  pe, uint8_t* server_data) const {
+#pragma HLS inline
+      const std::pair<size_t, size_t> block_byte = m_par.atu.index_to_block(Layer, pe, m_idx);
+      const size_t element_size = m_par.atu.element_size(Layer);
+
+      if (block_byte.first != m_par.cached_block) {
+        m_par.oram.read(block_byte.first, m_par.cache.data(), server_data);
+        m_par.cached_block = block_byte.first;
+      }
+
+      ap_uint<SIMD> val = 0;
+      for (size_t i = 0; i < element_size; ++i) {
+        #pragma HLS pipeline
+        val |= ap_uint<SIMD>(m_par.cache[block_byte.second + i]) << (i * 8);
+      }
+
+      return val;
+    }
+  };
+
+ public:
+  TileIndex weights(unsigned const  tile) {
+#pragma HLS inline
+    return  TileIndex(*this, tile);
+  }
+};
+
+//template<unsigned Layer, unsigned SIMD, unsigned PE, unsigned TILES>
+//class ORAMBinaryWeights {
+// public:
+//  ap_uint<SIMD>  m_weights[PE][TILES];
+//
+// private:
+//  /**
+//   * Temporary container for the tile index to implement the
+//   * memory access in pe -> tile order.
+//   */
+//  class TileIndex {
+//    ORAMBinaryWeights const &m_par;
+//    unsigned          const  m_idx;
+//
+//   public:
+//    TileIndex(ORAMBinaryWeights const &par, unsigned const  idx)
+//      : m_par(par), m_idx(idx) {
+//#pragma HLS inline
+//    }
+//
+//   public:
+//    ap_uint<SIMD> operator[](unsigned const  pe) const {
+//#pragma HLS inline
+//      return  m_par.m_weights[pe][m_idx];
+//    }
+//  };
+//
+// public:
+//  TileIndex weights(unsigned const  tile) const {
+//#pragma HLS inline
+//    return  TileIndex(*this, tile);
+//  }
+//
+//  template<typename ORAM, typename ATU>
+//  void loadParameters(ORAM& oram, const ATU& atu, uint8_t* block_cache, uint8_t* server_data) {
+//    const size_t element_size = atu.element_size(Layer);
+//    std::pair<size_t, size_t> block_byte;
+//
+//    for (unsigned pe = 0; pe < PE; ++pe) {
+//      for (unsigned tile = 0; tile < TILES; ++tile) {
+//        block_byte = atu.index_to_block(Layer, pe, tile);
+//        oram.read(block_byte.first, block_cache, server_data);
+//
+//        m_weights[pe][tile] = 0;
+//        for (size_t i = 0; i < element_size; ++i) {
+//          #pragma HLS pipeline
+//          m_weights[pe][tile] |= ap_uint<SIMD>(block_cache[block_byte.second + i]) << (i * 8);
+//        }
+//      }
+//    }
+//  }
+//};
+
+
 template<unsigned SIMD, unsigned PE, unsigned TILES>
 class TMRBinaryWeights {
  public:
@@ -334,5 +481,25 @@ class InterleavedFixedPointWeights {
     return  TileIndex(*this, tile);
   }
 };
+
+
+template<size_t Layer, unsigned SIMD, typename WT ,unsigned PE, unsigned TILES, typename Weights, typename ORAM, typename ATU>
+void loadORAMWeights(Weights& weights, ORAM& oram, const ATU& atu, uint8_t* block_cache, uint8_t* server_data) {
+  const size_t element_size = atu.element_size(Layer);
+  std::pair<size_t, size_t> block_byte;
+
+  for (unsigned pe = 0; pe < PE; ++pe) {
+    for (unsigned tile = 0; tile < TILES; ++tile) {
+      block_byte = atu.index_to_block(Layer, pe, tile);
+      oram.read(block_byte.first, block_cache, server_data);
+
+      weights.m_weights[pe][tile] = 0;
+      for (size_t i = 0; i < element_size; ++i) {
+        #pragma HLS pipeline
+        weights.m_weights[pe][tile] |= ap_uint<SIMD*WT::width>(block_cache[block_byte.second + i]) << (i * 8);
+      }
+    }
+  }
+}
 
 #endif
