@@ -1,6 +1,5 @@
 #include "top.h"
-#include "fpga_path_oram.h"
-#include "memory/fpga_resource_pool.h"
+#include "fpga_path_oram2.h"
 
 #include <array>
 #include <cstdint>
@@ -9,7 +8,8 @@
 #include <random>
 #include <vector>
 
-#define ORAM_IDBLOCK_SIZE (ORAM_BLOCK_SIZE + sizeof(uint64_t))
+#define ORAM_BLOCK_ID_SIZE sizeof(uint64_t)
+#define ORAM_IDBLOCK_SIZE (ORAM_BLOCK_SIZE + ORAM_BLOCK_ID_SIZE)
 #define ORAM_BUCKET_COUNT ((1ull << (ORAM_HEIGHT+1)) - 1)
 #define ORAM_BLOCK_COUNT (ORAM_BUCKET_SIZE * ORAM_BUCKET_COUNT)
 #define ORAM_SERVER_SIZE (ORAM_BLOCK_COUNT * ORAM_IDBLOCK_SIZE)
@@ -48,7 +48,7 @@ void test_oram() {
 	std::unordered_map<uint64_t, std::array<uint8_t, ORAM_BLOCK_SIZE>> input_map;
 
 	std::cout << "Generating inputs" << std::endl;
-	for (int i = 0; i < 50; ++i) {
+	for (int i = 0; i < ORAM_BLOCK_COUNT/2; ++i) {
 		const uint64_t blk_id = addr_dist(gen);
 		auto& block = input_map[blk_id];
 		// for (uint8_t& n : block) {

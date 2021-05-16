@@ -55,8 +55,9 @@ public:
 	}
 
 	void initServerMem(uint8_t* server_data) {
+		const uint64_t id_size = SIZEOF_MEMBER(IDBlock, id);
+
 		for (uint64_t block = 0; block < block_count_N; ++block) {
-			const uint64_t id_size = SIZEOF_MEMBER(IDBlock, id);
 			const uint64_t offset = block * (id_size + BlockSizeB);
 
 			//memcpy(server_data + offset, &IDBlock::invalid_block, SIZEOF_MEMBER(IDBlock, id));
